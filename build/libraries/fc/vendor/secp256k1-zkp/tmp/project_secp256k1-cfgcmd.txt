@@ -1,0 +1,1 @@
+cmd='/home/toothpick/bitshares-core/libraries/fc/vendor/secp256k1-zkp/configure;--prefix=/home/toothpick/bitshares-core/build/libraries/fc/vendor/secp256k1-zkp;--with-bignum=no'
