@@ -286,3 +286,96 @@ bi = sha1();   // 或 sha256() / sha512() / ripemd160()
 ```
 
 ---
+
+## [2026-06-19] hash160.cpp：混合使用低级哈希 API 在 OpenSSL 3.0 废弃
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**根因：** `hash160.cpp` 先调 `SHA256_*` API（废弃），再调 `RIPEMD160_*` API（废弃）。`hash160::encoder::write/result/reset` 直接操作裸 `SHA256_CTX` 和 `RIPEMD160_CTX`。
+
+**修复：**
+- SHA256 部分迁移 EVP API（与 sha256.cpp 一致）
+- RIPEMD160 部分保留低级 API，局部加 `#pragma GCC diagnostic` 压制
+- `from_variant` 中 `memset(&bi, 0, sizeof(bi))` → `bi = hash160()`
+
+---
+
+## [2026-06-19] elliptic_common.cpp / elliptic_impl_priv.cpp：OpenSSL 3.0 废弃 EC_KEY API
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**警告信息：**
+```
+elliptic_common.cpp: warning: 'EC_KEY_new_by_curve_name' is deprecated: Since OpenSSL 3.0
+elliptic_common.cpp: warning: 'EC_KEY_generate_key' is deprecated: Since OpenSSL 3.0
+elliptic_common.cpp: warning: 'EC_KEY_get0_private_key' is deprecated: Since OpenSSL 3.0
+```
+
+**根因：** `private_key::generate()` 和 `get_secret(EC_KEY*)` 使用了 OpenSSL 3.0 废弃的 `EC_KEY` 系列 API。
+
+**修复：**
+1. `elliptic_common.cpp`：`generate()` 用 `#if OPENSSL_VERSION_NUMBER >= 0x30000000L` 分支，改用 `EVP_EC_gen("secp256k1")` + `EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &bn)` 提取私钥；`#else` 保留原 EC_KEY 路径；`get_secret(EC_KEY*)` 整体加 `#if < 0x30000000L` 守卫
+2. `elliptic_impl_priv.cpp`：`private_key(EC_KEY*)` 构造函数加 `#if < 0x30000000L` 守卫
+3. `elliptic.hpp`：将 `private_key(EC_KEY*)` 和 `get_secret(const EC_KEY*)` 声明也用版本守卫包裹
+
+---
+
+## [2026-06-19] elliptic_secp256k1.cpp：`public_key(public_key_point_data)` 使用废弃 EC_KEY API
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**根因：** `public_key` 由非压缩点数据构造时，原实现通过 `EC_KEY` 设置公钥再提取，触发 OpenSSL 3.0 废弃警告。
+
+**修复：** 改用非废弃的 `EC_GROUP` + `EC_POINT` RAII 包装（`ec_group`/`ec_point`/`bn_ctx` 来自 `openssl.hpp`），直接调 `EC_POINT_oct2point` 解析非压缩点，再调 `EC_POINT_point2oct` 转回压缩格式：
+```cpp
+ec_group group( EC_GROUP_new_by_curve_name( NID_secp256k1 ) );
+ec_point point( EC_POINT_new( group ) );
+bn_ctx   ctx( BN_CTX_new() );
+FC_ASSERT( EC_POINT_oct2point( group, point, front, sizeof(dat), ctx ) );
+EC_POINT_point2oct( group, point, POINT_CONVERSION_COMPRESSED, buffer, sizeof(my->_key), ctx );
+```
+
+---
+
+## [2026-06-19] websocketpp/utilities.hpp：`ci_less` 继承废弃的 `std::binary_function`
+
+**环境：** Ubuntu 24.04 / GCC 13 (C++17)
+
+**警告信息：**
+```
+utilities.hpp: warning: 'binary_function<...>' is deprecated [-Wdeprecated-declarations]
+```
+
+**根因：** `std::binary_function` 在 C++17 中废弃。`ci_less` 内的嵌套结构 `nocase_compare` 继承了它。
+
+**修复：** 直接删除 `: public std::binary_function<...>` 继承，自行提供所需 `typedef` 或直接保留 `operator()`（C++11 起不再需要 `binary_function`）。
+
+---
+
+## [2026-06-19] miniz.c：`TDEFL_PUT_BITS` 宏 `-Wmisleading-indentation`
+
+**环境：** Ubuntu 24.04 / GCC 13
+
+**警告信息：**
+```
+miniz.c: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+```
+
+**根因：** `TDEFL_PUT_BITS` 宏内的 `while` 循环中，`if` 语句无花括号，其后两行 `d->m_bit_buffer >>= 8` 和 `d->m_bits_in -= 8` 的缩进看似在 `if` 体内，实际上始终在 `while` 循环中执行（这是正确语义：无论缓冲区是否满，位计数都必须推进，否则死循环）。
+
+**修复：** `libraries/fc/src/compress/miniz.c` 第 1910 行：给 `if` 加花括号，只将写 buffer 那一行包进去，其余两行保持在 `if` 外：
+```c
+// 改前
+if (d->m_pOutput_buf < d->m_pOutput_buf_end) \
+  *d->m_pOutput_buf++ = (mz_uint8)(d->m_bit_buffer); \
+  d->m_bit_buffer >>= 8; \
+  d->m_bits_in -= 8; \
+// 改后
+if (d->m_pOutput_buf < d->m_pOutput_buf_end) { \
+  *d->m_pOutput_buf++ = (mz_uint8)(d->m_bit_buffer); \
+} \
+d->m_bit_buffer >>= 8; \
+d->m_bits_in -= 8; \
+```
+
+---
