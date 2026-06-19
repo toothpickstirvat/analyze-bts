@@ -1,7 +1,7 @@
 #include <fc/crypto/hex.hpp>
 #include <fc/crypto/hmac.hpp>
 #include <fc/fwd_impl.hpp>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <string.h>
 #include <cmath>
 #include <fc/crypto/sha256.hpp>
@@ -30,7 +30,10 @@ namespace fc {
 
 
     struct sha256::encoder::impl {
-       SHA256_CTX ctx;
+       EVP_MD_CTX* ctx;
+       impl() : ctx(EVP_MD_CTX_new()) {}
+       ~impl() { EVP_MD_CTX_free(ctx); }
+       impl(const impl& o) : ctx(EVP_MD_CTX_new()) { EVP_MD_CTX_copy_ex(ctx, o.ctx); }
     };
 
     sha256::encoder::~encoder() {}
@@ -54,15 +57,16 @@ namespace fc {
     }
 
     void sha256::encoder::write( const char* d, uint32_t dlen ) {
-      SHA256_Update( &my->ctx, d, dlen); 
+      EVP_DigestUpdate(my->ctx, d, dlen);
     }
     sha256 sha256::encoder::result() {
       sha256 h;
-      SHA256_Final((uint8_t*)h.data(), &my->ctx );
+      unsigned int len = sizeof(h._hash);
+      EVP_DigestFinal_ex(my->ctx, (uint8_t*)h.data(), &len);
       return h;
     }
     void sha256::encoder::reset() {
-      SHA256_Init( &my->ctx);  
+      EVP_DigestInit_ex(my->ctx, EVP_sha256(), nullptr);
     }
 
     sha256 operator << ( const sha256& h1, uint32_t i ) {
@@ -106,7 +110,7 @@ namespace fc {
    void from_variant( const variant& v, sha256& bi, uint32_t max_depth )
    {
       std::vector<char> ve = v.as< std::vector<char> >( max_depth );
-      memset( &bi, char(0), sizeof(bi) );
+      bi = sha256();
       if( ve.size() )
          memcpy( &bi, ve.data(), std::min<size_t>(ve.size(),sizeof(bi)) );
   }

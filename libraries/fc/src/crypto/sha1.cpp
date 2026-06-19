@@ -1,6 +1,6 @@
 #include <fc/crypto/hex.hpp>
 #include <fc/fwd_impl.hpp>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <string.h>
 #include <fc/crypto/sha1.hpp>
 #include <fc/variant.hpp>
@@ -24,7 +24,10 @@ char* sha1::data()const { return (char*)&_hash[0]; }
 
 
 struct sha1::encoder::impl {
-   SHA_CTX ctx;
+   EVP_MD_CTX* ctx;
+   impl() : ctx(EVP_MD_CTX_new()) {}
+   ~impl() { EVP_MD_CTX_free(ctx); }
+   impl(const impl& o) : ctx(EVP_MD_CTX_new()) { EVP_MD_CTX_copy_ex(ctx, o.ctx); }
 };
 
 sha1::encoder::~encoder() {}
@@ -42,15 +45,16 @@ sha1 sha1::hash( const std::string& s ) {
 }
 
 void sha1::encoder::write( const char* d, uint32_t dlen ) {
-  SHA1_Update( &my->ctx, d, dlen); 
+  EVP_DigestUpdate(my->ctx, d, dlen);
 }
 sha1 sha1::encoder::result() {
   sha1 h;
-  SHA1_Final((uint8_t*)h.data(), &my->ctx );
+  unsigned int len = sizeof(h._hash);
+  EVP_DigestFinal_ex(my->ctx, (uint8_t*)h.data(), &len);
   return h;
 }
 void sha1::encoder::reset() {
-  SHA1_Init( &my->ctx);  
+  EVP_DigestInit_ex(my->ctx, EVP_sha1(), nullptr);
 }
 
 sha1 operator << ( const sha1& h1, uint32_t i ) {
@@ -90,7 +94,7 @@ bool operator == ( const sha1& h1, const sha1& h2 ) {
   void from_variant( const variant& v, sha1& bi, uint32_t max_depth )
   {
     std::vector<char> ve = v.as< std::vector<char> >( max_depth );
-    memset( &bi, char(0), sizeof(bi) );
+    bi = sha1();
     if( ve.size() )
        memcpy( &bi, ve.data(), std::min<size_t>(ve.size(),sizeof(bi)) );
   }

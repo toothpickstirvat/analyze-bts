@@ -57,8 +57,10 @@ ripemd160 ripemd160::hash( const string& s ) {
   return hash( s.c_str(), s.size() );
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 void ripemd160::encoder::write( const char* d, uint32_t dlen ) {
-  RIPEMD160_Update( &my->ctx, d, dlen); 
+  RIPEMD160_Update( &my->ctx, d, dlen);
 }
 ripemd160 ripemd160::encoder::result() {
   ripemd160 h;
@@ -66,8 +68,9 @@ ripemd160 ripemd160::encoder::result() {
   return h;
 }
 void ripemd160::encoder::reset() {
-  RIPEMD160_Init( &my->ctx);  
+  RIPEMD160_Init( &my->ctx);
 }
+#pragma GCC diagnostic pop
 
 ripemd160 operator << ( const ripemd160& h1, uint32_t i ) {
   ripemd160 result;
@@ -106,7 +109,7 @@ bool operator == ( const ripemd160& h1, const ripemd160& h2 ) {
    void from_variant( const variant& v, ripemd160& bi, uint32_t max_depth )
    {
       std::vector<char> ve = v.as< std::vector<char> >( max_depth );
-      memset( &bi, char(0), sizeof(bi) );
+      bi = ripemd160();
       if( ve.size() )
          memcpy( &bi, ve.data(), std::min<size_t>(ve.size(),sizeof(bi)) );
   }

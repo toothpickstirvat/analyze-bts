@@ -1,7 +1,7 @@
 #include <fc/crypto/hex.hpp>
 #include <fc/crypto/hmac.hpp>
 #include <fc/fwd_impl.hpp>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <string.h>
 #include <fc/crypto/sha512.hpp>
 #include <fc/variant.hpp>
@@ -23,7 +23,10 @@ namespace fc {
 
 
     struct sha512::encoder::impl {
-       SHA512_CTX ctx;
+       EVP_MD_CTX* ctx;
+       impl() : ctx(EVP_MD_CTX_new()) {}
+       ~impl() { EVP_MD_CTX_free(ctx); }
+       impl(const impl& o) : ctx(EVP_MD_CTX_new()) { EVP_MD_CTX_copy_ex(ctx, o.ctx); }
     };
 
     sha512::encoder::~encoder() {}
@@ -41,15 +44,16 @@ namespace fc {
     }
 
     void sha512::encoder::write( const char* d, uint32_t dlen ) {
-      SHA512_Update( &my->ctx, d, dlen); 
+      EVP_DigestUpdate(my->ctx, d, dlen);
     }
     sha512 sha512::encoder::result() {
       sha512 h;
-      SHA512_Final((uint8_t*)h.data(), &my->ctx );
+      unsigned int len = sizeof(h._hash);
+      EVP_DigestFinal_ex(my->ctx, (uint8_t*)h.data(), &len);
       return h;
     }
     void sha512::encoder::reset() {
-      SHA512_Init( &my->ctx);  
+      EVP_DigestInit_ex(my->ctx, EVP_sha512(), nullptr);
     }
 
     sha512 operator << ( const sha512& h1, uint32_t i ) {
@@ -92,7 +96,7 @@ namespace fc {
    void from_variant( const variant& v, sha512& bi, uint32_t max_depth )
    {
       std::vector<char> ve = v.as< std::vector<char> >( max_depth );
-      memset( &bi, char(0), sizeof(bi) );
+      bi = sha512();
       if( ve.size() )
          memcpy( &bi, ve.data(), std::min<size_t>(ve.size(),sizeof(bi)) );
   }
