@@ -66,3 +66,20 @@ openssl.cpp:78: warning: 'void DH_free(DH*)' is deprecated: Since OpenSSL 3.0
 3. `libraries/fc/src/crypto/dh.cpp`：用 `#if OPENSSL_VERSION_NUMBER >= 0x30000000L` 分支，将四个函数（`generate_params`、`validate`、`generate_pub_key`、`compute_shared_key`）改用 `EVP_PKEY_CTX` / `OSSL_PARAM_BLD` / `EVP_PKEY_derive` 等新 API 实现；`#else` 分支保留原有 OpenSSL 1.x 代码
 
 ---
+
+## [2026-06-19] fc git_revision.cpp 编译错误：`HEAD-HASH-NOTFOUND` 被当作 C++ 标识符
+
+**错误信息：**
+```
+build/libraries/fc/git_revision.cpp:4: error: 'HEAD' was not declared in this scope
+#define FC_GIT_REVISION_UNIX_TIMESTAMP HEAD-HASH-NOTFOUND
+```
+
+**根因：**
+`libraries/fc/.git` 是子模块指针文件，指向 `../../.git/modules/libraries/fc`，但该路径不存在（子模块 git 数据目录未初始化）。cmake 脚本 `GetGitRevisionDescription.cmake` 中 `get_git_unix_timestamp` 找不到 git hash 时，将回退值字符串 `"HEAD-HASH-NOTFOUND"` 直接替换进 `#define`，C++ 编译器将其解析为三个未定义标识符相减。
+
+**修复：**
+1. `libraries/fc/GitVersionGen/GetGitRevisionDescription.cmake`：将 `get_git_unix_timestamp` 中无法获取 hash 时的回退值从 `"HEAD-HASH-NOTFOUND"` 改为 `"0"`（合法的 `uint32_t` 字面量）
+2. `build/libraries/fc/git_revision.cpp`（构建目录生成文件）：直接将 `HEAD-HASH-NOTFOUND` 改为 `0` 以立即解除编译阻塞
+
+---
