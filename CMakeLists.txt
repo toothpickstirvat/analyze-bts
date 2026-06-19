@@ -184,6 +184,9 @@ if (NOT MSVC)
     add_definitions (-fPIC)
 endif(NOT MSVC)
 
+# Suppress Boost.Bind global placeholder deprecation notice (Boost >= 1.73)
+add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set( GRAPHENE_EGENESIS_JSON "${CMAKE_CURRENT_SOURCE_DIR}/libraries/egenesis/genesis.json"
      CACHE STRING "Path to embedded genesis file" )
