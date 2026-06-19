@@ -84,36 +84,7 @@ endmacro()
 # Save the old value of CMAKE_REQUIRED_FLAGS
 set( TEMP_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS} )
 
-# Check submodules
-if(NOT MANUAL_SUBMODULES)
-  find_package(Git)
-  if(GIT_FOUND)
-    function (check_submodule relative_path)
-      execute_process(COMMAND git rev-parse "HEAD"
-                      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${relative_path}
-                      OUTPUT_VARIABLE localHead
-                      RESULT_VARIABLE gitResult
-                      ERROR_QUIET)
-      if(NOT gitResult EQUAL 0)
-        message(WARNING "Submodule '${relative_path}' git directory not found, skipping version check.")
-        return()
-      endif()
-      execute_process(COMMAND git rev-parse "HEAD:${relative_path}" WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE checkedHead)
-      string(COMPARE EQUAL "${localHead}" "${checkedHead}" upToDate)
-      if (upToDate)
-        message(STATUS "Submodule '${relative_path}' is up-to-date")
-      else()
-        message(FATAL_ERROR "Submodule '${relative_path}' is not up-to-date. Please update all submodules with\ngit submodule update --init --recursive --force\nor run cmake with -DMANUAL_SUBMODULES=1\n")
-      endif()
-    endfunction ()
-
-    message(STATUS "Checking submodules")
-    check_submodule(docs)
-    check_submodule(libraries/fc)
-  endif()
-endif()
-# Make sure to always re-run the test.
-unset( MANUAL_SUBMODULES CACHE )
+# Submodule check removed: fc and docs are committed as regular directories in this fork.
 
 # Fortify source
 if (CMAKE_COMPILER_IS_GNUCXX)
