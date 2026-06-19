@@ -50,13 +50,19 @@ openssl.cpp:49:11: error: 'FIPS_mode_set' was not declared in this scope
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER < 0x30000000L
 ```
 
-### 警告：`DH_free` 已废弃（仅警告，不阻塞编译）
+### `DH_free` 已废弃 → 迁移到 EVP_PKEY API（已修复）
 
 **警告信息：**
 ```
 openssl.cpp:78: warning: 'void DH_free(DH*)' is deprecated: Since OpenSSL 3.0
 ```
 
-**根因：** OpenSSL 3.0 将 `DH` 系列 API 标记为废弃，推荐改用 `EVP_PKEY` API。涉及文件：`openssl.cpp` 和 `src/crypto/dh.cpp`。当前无 `-Werror`，不影响编译，但未来可能需要重构。
+**根因：** OpenSSL 3.0 将整个 `DH` 系列 API 标记为废弃，推荐改用 `EVP_PKEY` / `EVP_PKEY_CTX` API。
+
+**修复（三处改动）：**
+
+1. `libraries/fc/include/fc/crypto/openssl.hpp`：用 `#if OPENSSL_VERSION_NUMBER < 0x30000000L` 包裹 `SSL_TYPE_DECL(ssl_dh, DH)`
+2. `libraries/fc/src/crypto/openssl.cpp`：用同样条件包裹 `SSL_TYPE_IMPL(ssl_dh, DH, DH_free)`
+3. `libraries/fc/src/crypto/dh.cpp`：用 `#if OPENSSL_VERSION_NUMBER >= 0x30000000L` 分支，将四个函数（`generate_params`、`validate`、`generate_pub_key`、`compute_shared_key`）改用 `EVP_PKEY_CTX` / `OSSL_PARAM_BLD` / `EVP_PKEY_derive` 等新 API 实现；`#else` 分支保留原有 OpenSSL 1.x 代码
 
 ---

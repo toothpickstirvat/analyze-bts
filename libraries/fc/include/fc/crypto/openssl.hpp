@@ -47,7 +47,9 @@ namespace fc
     SSL_TYPE_DECL(ecdsa_sig,      ECDSA_SIG)
     SSL_TYPE_DECL(bn_ctx,         BN_CTX)
     SSL_TYPE_DECL(evp_cipher_ctx, EVP_CIPHER_CTX)
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     SSL_TYPE_DECL(ssl_dh,         DH)
+#endif
 
     /** allocates a bignum by default.. */
     struct ssl_bignum : public ssl_wrapper<BIGNUM>

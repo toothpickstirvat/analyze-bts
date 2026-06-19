@@ -94,5 +94,7 @@ namespace  fc
     SSL_TYPE_IMPL(ecdsa_sig,      ECDSA_SIG,      ECDSA_SIG_free)
     SSL_TYPE_IMPL(bn_ctx,         BN_CTX,         BN_CTX_free)
     SSL_TYPE_IMPL(evp_cipher_ctx, EVP_CIPHER_CTX, EVP_CIPHER_CTX_free )
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     SSL_TYPE_IMPL(ssl_dh,         DH,             DH_free)
+#endif
 }
