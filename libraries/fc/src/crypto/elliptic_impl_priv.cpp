@@ -61,14 +61,13 @@ namespace fc { namespace ecc {
         return my->_key;
     }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     private_key::private_key( EC_KEY* k )
     {
        my->_key = get_secret( k );
        EC_KEY_free(k);
     }
-#pragma GCC diagnostic pop
+#endif
 
     public_key private_key::get_public_key()const
     {

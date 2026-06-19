@@ -132,24 +132,21 @@ namespace fc { namespace ecc {
         return dat;
     }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     public_key::public_key( const public_key_point_data& dat )
     {
-        const unsigned char* front = dat.data();
-        if( *front == 0 ){}
-        else
-        {
-            EC_KEY *key = EC_KEY_new_by_curve_name( NID_secp256k1 );
-            key = o2i_ECPublicKey( &key, &front, sizeof(dat) );
-            FC_ASSERT( key );
-            EC_KEY_set_conv_form( key, POINT_CONVERSION_COMPRESSED );
-            unsigned char* buffer = my->_key.data();
-            i2o_ECPublicKey( key, &buffer ); // FIXME: questionable memory handling
-            EC_KEY_free( key );
-        }
+        const unsigned char* front = reinterpret_cast<const unsigned char*>(dat.data());
+        if( *front == 0 ) return;
+
+        ec_group group( EC_GROUP_new_by_curve_name( NID_secp256k1 ) );
+        ec_point point( EC_POINT_new( group ) );
+        bn_ctx   ctx( BN_CTX_new() );
+
+        FC_ASSERT( EC_POINT_oct2point( group, point, front, sizeof(dat), ctx ) );
+
+        unsigned char* buffer = reinterpret_cast<unsigned char*>(my->_key.data());
+        EC_POINT_point2oct( group, point, POINT_CONVERSION_COMPRESSED,
+                            buffer, sizeof(my->_key), ctx );
     }
-#pragma GCC diagnostic pop
 
     public_key::public_key( const public_key_data& dat )
     {

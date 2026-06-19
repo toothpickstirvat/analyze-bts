@@ -196,39 +196,54 @@ namespace fc { namespace ecc {
         return regenerate( secret );
     }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/core_names.h>
+#endif
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     fc::sha256 private_key::get_secret( const EC_KEY * const k )
     {
        if( !k )
-       {
           return fc::sha256();
-       }
 
        fc::sha256 sec;
        const BIGNUM* bn = EC_KEY_get0_private_key(k);
        if( bn == NULL )
-       {
-         FC_THROW_EXCEPTION( exception, "get private key failed" );
-       }
+          FC_THROW_EXCEPTION( exception, "get private key failed" );
        int nbytes = BN_num_bytes(bn);
        BN_bn2bin(bn, &((unsigned char*)&sec)[32-nbytes] );
        return sec;
     }
+#endif
 
     private_key private_key::generate()
     {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+       EVP_PKEY* pkey = EVP_EC_gen("secp256k1");
+       if( !pkey )
+          FC_THROW_EXCEPTION( exception, "Unable to generate EC key" );
+
+       BIGNUM* bn = nullptr;
+       if( !EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_PRIV_KEY, &bn) || !bn )
+       {
+          EVP_PKEY_free(pkey);
+          FC_THROW_EXCEPTION( exception, "ecc key generation error" );
+       }
+       EVP_PKEY_free(pkey);
+
+       fc::sha256 secret;
+       int nbytes = BN_num_bytes(bn);
+       BN_bn2bin(bn, reinterpret_cast<unsigned char*>(&secret) + 32 - nbytes);
+       BN_free(bn);
+       return regenerate(secret);
+#else
        EC_KEY* k = EC_KEY_new_by_curve_name( NID_secp256k1 );
        if( !k ) FC_THROW_EXCEPTION( exception, "Unable to generate EC key" );
        if( !EC_KEY_generate_key( k ) )
-       {
           FC_THROW_EXCEPTION( exception, "ecc key generation error" );
-
-       }
-
        return private_key( k );
+#endif
     }
-#pragma GCC diagnostic pop
 
     static std::string _to_base58( const extended_key_data& key )
     {

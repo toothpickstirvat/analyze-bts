@@ -139,8 +139,10 @@ namespace fc {
            unsigned int fingerprint() const { return get_public_key().fingerprint(); }
 
         private:
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
            private_key( EC_KEY* k );
            static fc::sha256 get_secret( const EC_KEY * const k );
+#endif
            fc::fwd<detail::private_key_impl,32> my;
     };
 
