@@ -1,6 +1,7 @@
 *.a
 *.sw*
-
+.idea/
+.vscode/
 .cache/
 
 *.cmake
