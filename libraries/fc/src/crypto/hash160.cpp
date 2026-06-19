@@ -25,7 +25,8 @@
 #include <fc/crypto/hex.hpp>
 #include <fc/crypto/hmac.hpp>
 #include <fc/fwd_impl.hpp>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>    // SHA256_DIGEST_LENGTH constant
 #include <openssl/ripemd.h>
 #include <string.h>
 #include <cmath>
@@ -52,11 +53,14 @@ hash160::operator string()const { return  str(); }
 char* hash160::data()const { return (char*)&_hash[0]; }
 
 struct hash160::encoder::impl {
-   SHA256_CTX ctx;
+   EVP_MD_CTX* ctx;
+   impl() : ctx(EVP_MD_CTX_new()) {}
+   ~impl() { EVP_MD_CTX_free(ctx); }
+   impl(const impl& o) : ctx(EVP_MD_CTX_new()) { EVP_MD_CTX_copy_ex(ctx, o.ctx); }
 };
 
 hash160::encoder::~encoder() {}
-hash160::encoder::encoder() { SHA256_Init(&my->ctx); }
+hash160::encoder::encoder() { reset(); }
 
 hash160 hash160::hash( const char* d, uint32_t dlen ) {
    encoder e;
@@ -70,25 +74,27 @@ hash160 hash160::hash( const string& s ) {
 
 void hash160::encoder::write( const char* d, uint32_t dlen )
 {
-   SHA256_Update( &my->ctx, d, dlen); 
+   EVP_DigestUpdate(my->ctx, d, dlen);
 }
 
 hash160 hash160::encoder::result() {
-   // finalize the first hash
    unsigned char sha_hash[SHA256_DIGEST_LENGTH];
-   SHA256_Final( sha_hash, &my->ctx );
-   // perform the second hashing function
+   unsigned int sha_len = SHA256_DIGEST_LENGTH;
+   EVP_DigestFinal_ex(my->ctx, sha_hash, &sha_len);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
    RIPEMD160_CTX ripe_ctx;
    RIPEMD160_Init(&ripe_ctx);
    RIPEMD160_Update( &ripe_ctx, sha_hash, SHA256_DIGEST_LENGTH );
    hash160 h;
    RIPEMD160_Final( (uint8_t *)h.data(), &ripe_ctx );
+#pragma GCC diagnostic pop
    return h;
 }
 
-void hash160::encoder::reset() 
+void hash160::encoder::reset()
 {
-   SHA256_Init(&my->ctx);
+   EVP_DigestInit_ex(my->ctx, EVP_sha256(), nullptr);
 }
 
 hash160 operator << ( const hash160& h1, uint32_t i ) {
@@ -135,7 +141,7 @@ void to_variant( const hash160& bi, variant& v, uint32_t max_depth )
 void from_variant( const variant& v, hash160& bi, uint32_t max_depth )
 {
    std::vector<char> ve = v.as< std::vector<char> >( max_depth );
-   memset( &bi, char(0), sizeof(bi) );
+   bi = hash160();
    if( ve.size() )
       memcpy( &bi, ve.data(), std::min<size_t>(ve.size(),sizeof(bi)) );
 }

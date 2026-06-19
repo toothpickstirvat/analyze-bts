@@ -196,6 +196,8 @@ namespace fc { namespace ecc {
         return regenerate( secret );
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     fc::sha256 private_key::get_secret( const EC_KEY * const k )
     {
        if( !k )
@@ -226,6 +228,7 @@ namespace fc { namespace ecc {
 
        return private_key( k );
     }
+#pragma GCC diagnostic pop
 
     static std::string _to_base58( const extended_key_data& key )
     {
