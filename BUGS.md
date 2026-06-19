@@ -98,3 +98,93 @@ CMake Error: Submodule 'docs' is not up-to-date.
 **修复：** `CMakeLists.txt` 的 `check_submodule` 函数增加对 `git rev-parse HEAD` 返回值的检查；当子模块 git 目录不存在时（`RESULT_VARIABLE != 0`）改为 `WARNING` 并跳过，不再阻止 cmake 继续执行。
 
 ---
+
+## [2026-06-19] GCC 13 `-Wmissing-template-keyword` 误报（fc/include/fc/safe.hpp）
+
+**环境：** Ubuntu 24.04 / GCC 13.3
+
+**警告信息：**
+```
+safe.hpp:114:12: warning: expected 'template' keyword before dependent template name [-Wmissing-template-keyword]
+```
+
+**根因：** GCC 13 在模板类内部的 `friend` 非模板函数中，对 `std::numeric_limits<T>::max()` / `::min()` 产生误报，认为需要 `template` 关键字，实际上是编译器 bug（`numeric_limits` 的成员函数不是模板）。
+
+**修复：** 在 `libraries/fc/include/fc/safe.hpp` 中，用 `#pragma GCC diagnostic push/pop` 局部压制触发误报的三个 `friend operator+/-/*` 函数（第 112–160 行）：
+```cpp
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-template-keyword"
+    friend safe operator + ( ... ) { ... }
+    friend safe operator - ( ... ) { ... }
+    friend safe operator * ( ... ) { ... }
+#pragma GCC diagnostic pop
+```
+
+---
+
+## [2026-06-19] Boost >= 1.73 全局 bind 占位符废弃（`_1`/`_2`/`_3`）
+
+**环境：** Ubuntu 24.04 / Boost 1.83
+
+**提示信息：**
+```
+/usr/include/boost/bind.hpp:36:1: note: #pragma message: The practice of declaring the Bind
+placeholders (_1, _2, ...) in the global namespace is deprecated...
+```
+
+**根因：** Boost 1.73 起，将 `_1/_2/_3` 注入全局命名空间的做法被标记为废弃，推荐使用 `boost::placeholders::_1` 等限定名。以下三处代码使用了全局占位符：
+- `libraries/fc/include/fc/asio.hpp`：两处 `boost::bind(..., _1)`
+- `libraries/fc/src/asio.cpp`：两处 `boost::bind(..., _1, _2)`
+- `libraries/fc/vendor/websocketpp/websocketpp/common/functional.hpp`：`using ::_1; using ::_2; using ::_3;`
+
+**修复（四处改动）：**
+1. `asio.hpp`：`#include <boost/bind.hpp>` → `#include <boost/bind/bind.hpp>`；两处 `_1` → `boost::placeholders::_1`
+2. `asio.cpp`：两处 `_1/_2` → `boost::placeholders::_1/::_2`
+3. `websocketpp/common/functional.hpp`：`#include <boost/bind.hpp>` → `#include <boost/bind/bind.hpp>`；`using ::_1/2/3` → `using boost::placeholders::_1/2/3`
+4. `CMakeLists.txt` 保留 `-DBOOST_BIND_GLOBAL_PLACEHOLDERS` 作为兜底，压制其余未改到的第三方代码警告
+
+---
+
+## [2026-06-19] secp256k1-zkp 测试文件使用 OpenSSL 3.0 废弃 EC_KEY API
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**警告信息：**
+```
+tests.c:2261: warning: 'EC_KEY_new_by_curve_name' is deprecated: Since OpenSSL 3.0
+tests.c:2263: warning: 'd2i_ECPrivateKey' is deprecated: Since OpenSSL 3.0
+tests.c:2287: warning: 'ECDSA_sign' is deprecated: Since OpenSSL 3.0
+...
+```
+
+**根因：** `libraries/fc/vendor/secp256k1-zkp/src/tests.c` 是 secp256k1 库自带的测试套件，使用了 OpenSSL 3.0 废弃的 `EC_KEY` / `ECDSA_*` 系列 API。主项目构建通过 `ExternalProject_Add` 调 autoconf `make`，默认会编译测试。
+
+**修复：** `libraries/fc/CMakeLists.txt` 中的 `ExternalProject_Add` configure 命令加 `--disable-tests`，跳过 `tests.c` 的编译：
+```cmake
+CONFIGURE_COMMAND ... configure --prefix=... --with-bignum=no --disable-tests
+```
+重新构建时需先清除旧 secp256k1 构建目录：`rm -rf build/libraries/fc/vendor/secp256k1-zkp`
+
+---
+
+## [2026-06-19] `recursive_directory_iterator::level()` 已废弃（fc/src/filesystem.cpp）
+
+**环境：** Ubuntu 24.04 / Boost 1.83
+
+**警告信息：**
+```
+filesystem.cpp:199: warning: 'int boost::filesystem::recursive_directory_iterator::level() const'
+is deprecated: Use recursive_directory_iterator::depth() instead [-Wdeprecated-declarations]
+```
+
+**根因：** Boost.Filesystem 新版将 `level()` 重命名为 `depth()`，两者语义完全相同（返回当前递归深度），旧名已废弃。
+
+**修复：** `libraries/fc/src/filesystem.cpp` 第 199 行：
+```cpp
+// 改前
+int recursive_directory_iterator::level() { return _p->level(); }
+// 改后
+int recursive_directory_iterator::level() { return _p->depth(); }
+```
+
+---
