@@ -132,6 +132,8 @@ namespace fc { namespace ecc {
         return dat;
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     public_key::public_key( const public_key_point_data& dat )
     {
         const unsigned char* front = dat.data();
@@ -147,6 +149,7 @@ namespace fc { namespace ecc {
             EC_KEY_free( key );
         }
     }
+#pragma GCC diagnostic pop
 
     public_key::public_key( const public_key_data& dat )
     {
