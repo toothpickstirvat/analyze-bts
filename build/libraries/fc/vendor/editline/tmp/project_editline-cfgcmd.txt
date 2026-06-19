@@ -1,1 +1,0 @@
-cmd='/home/toothpick/bitshares-core/libraries/fc/vendor/editline/configure;--prefix=/home/toothpick/bitshares-core/build/libraries/fc/vendor/editline'
