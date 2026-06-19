@@ -107,6 +107,8 @@ namespace fc {
           return std::numeric_limits<T>::max();
       }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-template-keyword"
       friend safe operator + ( const safe& a, const safe& b )
       {
           if( b.value > 0 && a.value > (std::numeric_limits<T>::max() - b.value) )
@@ -155,6 +157,7 @@ namespace fc {
 
           return safe( a.value * b.value );
       }
+#pragma GCC diagnostic pop
 
       // T is signed
       template< typename... Dummy, typename X = T,
