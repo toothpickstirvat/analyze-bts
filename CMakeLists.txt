@@ -89,7 +89,15 @@ if(NOT MANUAL_SUBMODULES)
   find_package(Git)
   if(GIT_FOUND)
     function (check_submodule relative_path)
-      execute_process(COMMAND git rev-parse "HEAD" WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${relative_path} OUTPUT_VARIABLE localHead)
+      execute_process(COMMAND git rev-parse "HEAD"
+                      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${relative_path}
+                      OUTPUT_VARIABLE localHead
+                      RESULT_VARIABLE gitResult
+                      ERROR_QUIET)
+      if(NOT gitResult EQUAL 0)
+        message(WARNING "Submodule '${relative_path}' git directory not found, skipping version check.")
+        return()
+      endif()
       execute_process(COMMAND git rev-parse "HEAD:${relative_path}" WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE checkedHead)
       string(COMPARE EQUAL "${localHead}" "${checkedHead}" upToDate)
       if (upToDate)

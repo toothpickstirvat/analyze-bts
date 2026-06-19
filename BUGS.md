@@ -83,3 +83,18 @@ build/libraries/fc/git_revision.cpp:4: error: 'HEAD' was not declared in this sc
 2. `build/libraries/fc/git_revision.cpp`（构建目录生成文件）：直接将 `HEAD-HASH-NOTFOUND` 改为 `0` 以立即解除编译阻塞
 
 ---
+
+## [2026-06-19] cmake 子模块版本检查 FATAL_ERROR
+
+**错误信息：**
+```
+fatal: not a git repository: .../.git/modules/docs
+CMake Error: Submodule 'docs' is not up-to-date.
+```
+
+**根因：**
+`docs` 和 `libraries/fc` 都是 git 子模块，但 `.git/modules/docs` 和 `.git/modules/libraries/fc` 不存在（子模块 git 数据目录未初始化）。`CMakeLists.txt` 的 `check_submodule` 函数对 git 命令失败的情况直接报 `FATAL_ERROR`。
+
+**修复：** `CMakeLists.txt` 的 `check_submodule` 函数增加对 `git rev-parse HEAD` 返回值的检查；当子模块 git 目录不存在时（`RESULT_VARIABLE != 0`）改为 `WARNING` 并跳过，不再阻止 cmake 继续执行。
+
+---
