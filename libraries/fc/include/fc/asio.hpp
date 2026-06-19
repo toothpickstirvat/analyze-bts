@@ -3,7 +3,7 @@
  */
 #pragma once
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/thread.hpp>
 #include <vector>
 #include <fc/thread/future.hpp>
@@ -249,7 +249,7 @@ namespace asio {
         template<typename SocketType, typename AcceptorType>
         void accept( AcceptorType& acc, SocketType& sock ) {
             promise<void>::ptr p = promise<void>::create("fc::asio::tcp::accept");
-            acc.async_accept( sock, boost::bind( fc::asio::detail::error_handler, p, _1 ) );
+            acc.async_accept( sock, boost::bind( fc::asio::detail::error_handler, p, boost::placeholders::_1 ) );
             p->wait();
             //if( ec ) BOOST_THROW_EXCEPTION( boost::system::system_error(ec) );
         }
@@ -261,7 +261,7 @@ namespace asio {
         template<typename AsyncSocket, typename EndpointType>
         void connect( AsyncSocket& sock, const EndpointType& ep ) {
             promise<void>::ptr p = promise<void>::create("fc::asio::tcp::connect");
-            sock.async_connect( ep, boost::bind( fc::asio::detail::error_handler, p, _1 ) );
+            sock.async_connect( ep, boost::bind( fc::asio::detail::error_handler, p, boost::placeholders::_1 ) );
             p->wait();
             //if( ec ) BOOST_THROW_EXCEPTION( boost::system::system_error(ec) );
         }
