@@ -188,3 +188,101 @@ int recursive_directory_iterator::level() { return _p->depth(); }
 ```
 
 ---
+
+## [2026-06-19] aes.cpp：OpenSSL 线程回调 API 在 3.0 中导致 `-Waddress`
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**警告信息：**
+```
+aes.cpp:439: warning: the address of 'static long unsigned int fc::openssl_thread_config::get_thread_id()'
+will never be NULL [-Waddress]
+```
+
+**根因：** `CRYPTO_set_id_callback` / `CRYPTO_get_id_callback` 等手动线程回调 API 在 OpenSSL 1.1.0 起废弃，3.0 中已成 no-op（始终返回 NULL）。GCC 发现 `CRYPTO_get_id_callback() == &get_thread_id` 中函数地址永远不为 NULL，判断比较结果恒假而发出警告。
+
+**修复：** `libraries/fc/src/crypto/aes.cpp` 中将整个 `openssl_thread_config` 结构体及其实现用版本宏守卫，OpenSSL 1.1.0+ 自动管理线程安全，无需手动注册回调：
+```cpp
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+struct openssl_thread_config { ... };
+openssl_thread_config openssl_thread_config_manager;
+// ... 函数实现 ...
+#endif
+```
+
+---
+
+## [2026-06-19] sha1/sha256/sha512：低级哈希 API 在 OpenSSL 3.0 废弃
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**警告信息：**
+```
+sha1.cpp:45: warning: 'int SHA1_Update(SHA_CTX*, const void*, size_t)' is deprecated: Since OpenSSL 3.0
+sha1.cpp:49: warning: 'int SHA1_Final(unsigned char*, SHA_CTX*)' is deprecated: Since OpenSSL 3.0
+sha1.cpp:53: warning: 'int SHA1_Init(SHA_CTX*)' is deprecated: Since OpenSSL 3.0
+（sha256.cpp / sha512.cpp 同理）
+```
+
+**根因：** OpenSSL 3.0 将 `SHA_CTX` / `SHA256_CTX` / `SHA512_CTX` 及配套低级 API 标记为废弃，推荐使用 `EVP_Digest*` 统一接口。
+
+**修复：** 三个文件将 `impl` 改为持有 `EVP_MD_CTX*`，encoder 方法迁移到 EVP API（自 OpenSSL 1.0 起可用，无需版本守卫）：
+```cpp
+struct sha1::encoder::impl {
+    EVP_MD_CTX* ctx;
+    impl() : ctx(EVP_MD_CTX_new()) {}
+    ~impl() { EVP_MD_CTX_free(ctx); }
+    impl(const impl& o) : ctx(EVP_MD_CTX_new()) { EVP_MD_CTX_copy_ex(ctx, o.ctx); }
+};
+// write  → EVP_DigestUpdate
+// result → EVP_DigestFinal_ex
+// reset  → EVP_DigestInit_ex(ctx, EVP_sha1/256/512(), nullptr)
+```
+`#include <openssl/sha.h>` 改为 `#include <openssl/evp.h>`。
+
+---
+
+## [2026-06-19] ripemd160.cpp：RIPEMD160 API 在 OpenSSL 3.0 废弃
+
+**环境：** Ubuntu 24.04 / OpenSSL 3.0.13
+
+**警告信息：**
+```
+ripemd160.cpp:61: warning: 'int RIPEMD160_Update(...)' is deprecated: Since OpenSSL 3.0
+ripemd160.cpp:65: warning: 'int RIPEMD160_Final(...)' is deprecated: Since OpenSSL 3.0
+ripemd160.cpp:69: warning: 'int RIPEMD160_Init(...)' is deprecated: Since OpenSSL 3.0
+```
+
+**根因：** RIPEMD160 低级 API 在 OpenSSL 3.0 废弃。与 SHA 不同，RIPEMD160 在 OpenSSL 3.0 被归入 legacy provider，使用 EVP API 需显式加载该 provider，风险较高。
+
+**修复：** 保留低级 API，用 `#pragma GCC diagnostic` 局部压制三个 encoder 方法的警告：
+```cpp
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+void ripemd160::encoder::write(...) { RIPEMD160_Update(...); }
+ripemd160 ripemd160::encoder::result() { RIPEMD160_Final(...); }
+void ripemd160::encoder::reset() { RIPEMD160_Init(...); }
+#pragma GCC diagnostic pop
+```
+
+---
+
+## [2026-06-19] `memset` 对非 POD 类型清零（sha1/sha256/sha512/ripemd160）
+
+**警告信息：**
+```
+sha1.cpp:93: warning: 'void* memset(void*, int, size_t)' clearing an object of
+non-trivial type 'class fc::sha1'; use assignment or value-initialization instead [-Wclass-memaccess]
+```
+
+**根因：** `from_variant` 中用 `memset(&bi, 0, sizeof(bi))` 初始化具有用户定义构造函数的类，GCC 认为对非 POD 类型 memset 不安全。
+
+**修复：** 改为调用默认构造函数进行值初始化（各类默认构造函数均将 `_hash` 清零，语义等价）：
+```cpp
+// 改前
+memset( &bi, char(0), sizeof(bi) );
+// 改后
+bi = sha1();   // 或 sha256() / sha512() / ripemd160()
+```
+
+---
